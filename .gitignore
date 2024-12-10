@@ -1,0 +1,8 @@
+/.idea/
+/venv/
+/cmake-*
+
+__pycache__/
+
+/CMakeLists.txt
+/main.cpp
