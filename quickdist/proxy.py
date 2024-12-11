@@ -9,6 +9,7 @@ from typing import Dict
 from .pyzmq.binding import Dealer
 from .tunnel import Message
 from .logger import logger
+from .mount import Mount
 
 
 class Proxy(object):
@@ -49,6 +50,12 @@ class Proxy(object):
 
     def call(self, *args, **kwargs) -> Message:
         return self.__send('CALL', *args, **kwargs)
+
+    def mount(self, mount: Mount):
+        ret = self.__send('MOUNT', mount)
+        if ret.cmd != 'OK':
+            logger.error(ret)
+            raise RuntimeError(ret)
 
 
 def main():

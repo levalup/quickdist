@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 
-import multiprocessing
 from typing import List, Optional, Tuple, Any, Iterable
 
 from .logger import logger
 from .proxy import Proxy
 from .monster_proxy import ProxyPool
+from .mount import Mount
 
 
 class Monster(object):
@@ -22,6 +22,10 @@ class Monster(object):
     def connect(self, host: str, port: int = 8421):
         self.__nodes.append(Proxy(host, port))
 
+    def mount(self, mount: Mount):
+        for node in self.__nodes:
+            node.mount(mount)
+
     def setup(self, script_file: str):
         for node in self.__nodes:
             node.setup(script_file)
@@ -33,9 +37,6 @@ class Monster(object):
             info = node.info()
             processes = info.get('processes', 1)
             links.extend([(node.host, node.port)] * processes)
-
-        serial = multiprocessing.Value('i', 0)
-        ctx = multiprocessing.get_context('spawn')
 
         if self.__pool is not None:
             self.__pool.shutdown()
@@ -70,9 +71,13 @@ class Monster(object):
         assert self.__pool is not None
         return self.__pool.map(iterable, chunk_size=chunk_size)
 
-    def imap(self, iterable, chunk_size=None) -> Iterable[Any]:
+    def imap(self, iterable, chunk_size=1) -> Iterable[Any]:
         assert self.__pool is not None
         return self.__pool.imap(iterable, chunk_size=chunk_size)
+
+    def imap_unordered(self, iterable, chunk_size=1) -> Iterable[Any]:
+        assert self.__pool is not None
+        return self.__pool.imap_unordered(iterable, chunk_size=chunk_size)
 
     def __call__(self, *args, **kwargs) -> Any:
         assert self.__pool is not None

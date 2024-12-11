@@ -48,8 +48,10 @@ def init_ex(links: List[Tuple], serial: multiprocessing.Value):
 
 class ProxyPool(object):
     def __init__(self, links: List[Tuple[str, int]]):
-        serial = multiprocessing.Value('i', 0)
         self.__ctx = multiprocessing.get_context('spawn')
+
+        serial = self.__ctx.Value('i', 0, lock=True)
+
         self.__pool: Pool = self.__ctx.Pool(
             processes=len(links),
             initializer=init_ex,
@@ -81,8 +83,11 @@ class ProxyPool(object):
     def map(self, iterable, chunk_size=None) -> List[Any]:
         return self.__pool.map(main, iterable, chunksize=chunk_size)
 
-    def imap(self, iterable, chunk_size=None) -> Iterable[Any]:
+    def imap(self, iterable, chunk_size=1) -> Iterable[Any]:
         return self.__pool.imap(main, iterable, chunksize=chunk_size)
+
+    def imap_unordered(self, iterable, chunk_size=1) -> Iterable[Any]:
+        return self.__pool.imap_unordered(main, iterable, chunksize=chunk_size)
 
     def __call__(self, *args, **kwargs) -> Any:
         return self.__pool.apply(main, args, kwargs)

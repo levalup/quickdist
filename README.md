@@ -75,7 +75,7 @@ if __name__ == '__main__':
     print(monster.call(1, '2', 3))
 ```
 
-The must will distribute this call to the node. And get result.
+The monster will distribute this call to the node. And get result.
 
 ```text
 main[0](1, '2, 3')

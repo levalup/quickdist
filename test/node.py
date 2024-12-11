@@ -4,7 +4,7 @@ from quickdist.node import Node
 
 
 def main():
-    node = Node()
+    node = Node(port=8421, processes=4)
     node.run()
 
 

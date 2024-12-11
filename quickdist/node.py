@@ -9,7 +9,7 @@ from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, Future
 from typing import Dict, Callable, List
 
-
+from .mount import Mount
 from .pyzmq.binding import *
 from .tunnel import Message
 from .process import ProcessDistribute
@@ -58,6 +58,7 @@ class Node(object):
             'INFO': self.info,
             'SETUP': self.setup,
             'CALL': self.call,
+            'MOUNT': self.mount,
         }
 
     def run(self):
@@ -116,6 +117,8 @@ class Node(object):
         with open(script_path, 'w', encoding='utf-8') as f:
             f.write(script_content)
 
+        logger.debug(f'Setup {script_path}')
+
         if self.__pool is not None:
             self.__pool.shutdown()
 
@@ -152,6 +155,14 @@ class Node(object):
             result.result()
 
         return Message('OK', *args)
+
+    def mount(self, msg: Message) -> Message:
+        m = msg.args[0]
+        if isinstance(m, Mount):
+            m.mount()
+            return Message('OK')
+
+        return Message('ERROR', f'Unsupported mount object {type(m)}')
 
 
 def main():

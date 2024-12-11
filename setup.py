@@ -29,6 +29,24 @@ def find_packages(include=None):
     return packages
 
 
+def find_scripts(top=None):
+    def impl(root, dir, files):
+        root_dir = os.path.join(root, dir)
+        filenames = os.listdir(root_dir)
+        for filename in filenames:
+            fullpath = os.path.join(root_dir, filename)
+            if os.path.isdir(fullpath):
+                subdir = os.path.join(dir, filename)
+                impl(root, subdir, files)
+            else:
+                name, ext = os.path.splitext(filename)
+                if ext in {'.sh', '.ps1', '.bat', '.cmd'}:
+                    files.append(os.path.join(dir, filename))
+    files = []
+    impl(setup_root, top, files)
+    return files
+
+
 with open(requirements, 'rb') as f:
     install_requires = f.read().decode('utf-8').splitlines(keepends=False)
 
@@ -43,6 +61,7 @@ with open(delay_package, 'rb') as f:
 with open(readme, 'rb') as f:
     readme_content = f.read().decode('utf-8')
 
+print(find_scripts('quickdist/scripts'))
 print(find_packages(include=['quickdist']))
 
 setup(
@@ -59,7 +78,14 @@ setup(
     packages=find_packages(include=['quickdist']),
 
     include_package_data=True,
-    package_data={},
+    package_data={
+        'quickdist': [
+            'scripts/*.sh',
+            'scripts/*.ps1',
+            'scripts/*.bat',
+            'scripts/*.cmd',
+        ],
+    },
 
     platforms="any",
     install_requires=install_requires,
@@ -73,8 +99,9 @@ setup(
     zip_safe=False,
 
     classifiers=[
-        'Programming Language :: Python', 'Intended Audience :: Developers',
-        'Operating System :: OS Independent',
+        'Programming Language :: Python',
+        'Intended Audience :: Developers',
+        'Operating System :: Linux',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',

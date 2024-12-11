@@ -64,9 +64,11 @@ def run_subprocess(*args, **kwargs):
 
 class ProcessDistribute(object):
     def __init__(self, script: Union[str, Callable], size: int = None):
-        serial = multiprocessing.Value('i', 0)
         self.__size = size
         self.__ctx = multiprocessing.get_context('spawn')
+
+        serial = self.__ctx.Value('i', 0, lock=True)
+
         self.__pool: Pool = self.__ctx.Pool(
             processes=size,
             initializer=init_subprocess,
@@ -92,8 +94,11 @@ class ProcessDistribute(object):
     def map(self, iterable, chunk_size=None) -> List[Any]:
         return self.__pool.map(run_subprocess, iterable, chunksize=chunk_size)
 
-    def imap(self, iterable, chunk_size=None) -> Iterable[Any]:
+    def imap(self, iterable, chunk_size=1) -> Iterable[Any]:
         return self.__pool.imap(run_subprocess, iterable, chunksize=chunk_size)
+
+    def imap_unordered(self, iterable, chunk_size=1) -> Iterable[Any]:
+        return self.__pool.imap_unordered(iterable, chunksize=chunk_size)
 
     def __call__(self, *args, **kwargs) -> Any:
         return self.__pool.apply(run_subprocess, args, kwargs)
