@@ -65,9 +65,6 @@ class MountSshfs(Mount):
             lines.append(f'export {k}="{v}"')
 
         lines.append('')
-        lines.append('disown')
-        lines.append('exit')
-        lines.append('')
 
         return '\n'.join([script_functions, *lines])
 
