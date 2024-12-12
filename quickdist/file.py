@@ -5,14 +5,15 @@ import os.path as osp
 import pathlib
 import hashlib
 import shutil
-from typing import Any, Dict, Union, List
-
+from collections import deque
+from typing import Any, Dict, Union, List, Generator
 
 __all__ = [
     'File',
     'WorkFile',
     'LocalFile',
     'TemplFile',
+    'each_file',
 ]
 
 
@@ -251,6 +252,31 @@ class TemplFile(File):
     def __init__(self, path: str, source: str = None):
         super().__init__(reduce_absolute(path, get_tempdir(source)), source)
         self._md5 = calculate_md5(self.temp)
+
+
+def each_file(a: Any) -> Generator[File, None, None]:
+    if isinstance(a, File):
+        yield a
+        return
+
+    iters = deque()
+    if isinstance(a, (list, tuple, dict)):
+        iters.append(a)
+
+    while iters:
+        values = iters.popleft()
+        if isinstance(values, dict):
+            for v in values.values():
+                if isinstance(v, File):
+                    yield v
+                elif isinstance(v, (list, tuple, dict)):
+                    iters.append(v)
+        else:
+            for v in values:
+                if isinstance(v, File):
+                    yield v
+                elif isinstance(v, (list, tuple, dict)):
+                    iters.append(v)
 
 
 def main():

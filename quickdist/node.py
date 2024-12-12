@@ -1,20 +1,16 @@
 # -*- coding: utf-8 -*-
 
 import os.path
-import random
-import string
 import tempfile
-import multiprocessing
-from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, Future
-from typing import Dict, Callable, List
+from typing import Dict, List
 
 from .mount import Mount
 from .pyzmq.binding import *
 from .tunnel import Message
 from .process import ProcessDistribute
 from .logger import logger
-from .file import File
+from .file import File, each_file
 
 
 def script_cache_dir():
@@ -61,43 +57,29 @@ class Node(object):
             'MOUNT': self.mount,
         }
 
-    def run(self):
-        with Router(port=self.__port) as server:
-            server.setsockopt(zmq.RCVTIMEO, self.__timeout_ms)
+    def run(self) -> NoReturn:
+        def target(req: bytes) -> bytes:
+            msg = Message.load(req)
 
-            logger.info(f"Serve node :{self.__port}")
-            while True:
-                try:
-                    try:
-                        identity, body = server.recv_multipart()
-                    except zmq.Again as _:
-                        continue
-                    msg = Message.load(body)
+            if msg.cmd.upper() == 'CLOSE':
+                return Message('ERROR', 'Can not close server at current version').bytes()
 
-                    if msg.cmd.upper() == 'CLOSE':
-                        break
+            handler = self.__functions.get(msg.cmd.upper(), None)
+            if handler is None:
+                error = f'Received unknown cmd {msg.cmd}'
+                logger.error(error)
+                return Message('ERROR', error).bytes()
 
-                    handler = self.__functions.get(msg.cmd.upper(), None)
-                    if handler is None:
-                        error = f'Received unknown cmd {msg.cmd}'
-                        logger.error(error)
-                        server.send_multipart([identity, Message('ERROR', error).bytes()])
-                        continue
+            try:
+                ret = handler(msg)
+                logger.debug(f'Response {ret}')
+                return ret.bytes()
+            except Exception as e:
+                logger.error(e)
+                return Message('ERROR', str(e)).bytes()
 
-                    logger.debug(f'Received {msg}')
-
-                    def response(i, m):
-                        try:
-                            ret = handler(m)
-                            logger.debug(f'Response {ret}')
-                            server.send_multipart([i, ret.bytes()])
-                        except Exception as a:
-                            logger.error(a)
-                            server.send_multipart([i, Message('ERROR', str(a)).bytes()])
-                    self.__handle_executor.submit(response, identity, msg)
-
-                except Exception as e:
-                    logger.error(e)
+        rep = MultiThreadRep(port=self.__port, target=target, threads=self.__processes)
+        rep.run()
 
     def info(self, msg: Message) -> Message:
         return Message('OK', processes=self.__processes)
@@ -105,36 +87,37 @@ class Node(object):
     def setup(self, msg: Message) -> Message:
         script_content = msg.args[0]
 
-        script_dir = script_cache_dir()
-        os.makedirs(script_dir, exist_ok=True)
-
-        now = datetime.now().strftime('%Y%m%d-%H%M%S-%f')
-        suffix = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-
-        filename = f'job-{now}-{suffix}.py'
-
-        script_path = os.path.join(script_dir, filename)
-        with open(script_path, 'w', encoding='utf-8') as f:
-            f.write(script_content)
-
-        logger.debug(f'Setup {script_path}')
+        # script_dir = script_cache_dir()
+        # os.makedirs(script_dir, exist_ok=True)
+        #
+        # now = datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+        # suffix = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+        #
+        # filename = f'job-{now}-{suffix}.py'
+        #
+        # script_path = os.path.join(script_dir, filename)
+        # with open(script_path, 'w', encoding='utf-8') as f:
+        #     f.write(script_content)
+        #
+        # self.__script_path = script_path
+        #
+        # logger.debug(f'Setup {script_path}')
 
         if self.__pool is not None:
             self.__pool.shutdown()
 
-        self.__script_path = script_path
-        self.__pool = ProcessDistribute(script_path, self.__processes)
+        # self.__pool = ProcessDistribute(pathlib.Path(script_path), self.__processes)
+        self.__pool = ProcessDistribute(script_content, self.__processes)
 
         return Message('OK')
 
     def call(self, msg: Message) -> Message:
         # copy work files to local
         results: List[Future] = []
-        for arg in msg.args:
-            if isinstance(arg, File):
-                if not arg.nocopy:
-                    logger.debug(f'COPY(WORK->LOCAL): {arg.path}')
-                    results.append(self.__executor.submit(copy_origin_to_local, arg))
+        for arg in each_file(msg.args):
+            if not arg.nocopy:
+                logger.debug(f'COPY(WORK->LOCAL): {arg.path}')
+                results.append(self.__executor.submit(copy_origin_to_local, arg))
         for result in results:
             result.result()
 
@@ -146,11 +129,10 @@ class Node(object):
 
         # copy local files to temp
         results: List[Future] = []
-        for arg in args:
-            if isinstance(arg, File):
-                if not arg.nocopy:
-                    logger.debug(f'COPY(LOCAL->TEMP): {arg.path}')
-                    results.append(self.__executor.submit(copy_local_to_temp, arg))
+        for arg in each_file(args):
+            if not arg.nocopy:
+                logger.debug(f'COPY(LOCAL->TEMP): {arg.path}')
+                results.append(self.__executor.submit(copy_local_to_temp, arg))
         for result in results:
             result.result()
 

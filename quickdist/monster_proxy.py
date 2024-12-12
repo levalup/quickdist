@@ -4,24 +4,21 @@
 This file only run in subprocess
 """
 
-from datetime import datetime
 import multiprocessing
 from multiprocessing.pool import Pool
-from typing import Optional, List, Tuple, Any, Iterable
+from typing import Optional, List, Tuple, Any, Iterator
 
 from .proxy import Proxy
 from .file import File
 
 proxy: Optional[Proxy] = None
-
-
-def init(host: str, port: int):
-    global proxy
-    proxy = Proxy(host, port)
+pid: Optional[int] = None
 
 
 def main(*args, **kwargs):
     global proxy
+    global pid
+
     ret = proxy.call(*args, **kwargs)
 
     if ret.cmd == 'OK':
@@ -39,11 +36,26 @@ def main(*args, **kwargs):
     return ret.args
 
 
-def init_ex(links: List[Tuple], serial: multiprocessing.Value):
+def init_ex(links: List[Tuple],
+            serial: multiprocessing.Value):
+    global proxy
+    global pid
+
     with serial.get_lock():
         index = serial.value
         serial.value += 1
-    init(*links[index])
+
+    if len(links) == 0:
+        raise ValueError('Links empty.')
+
+    while index < 0:
+        index += len(links)
+    index = index % len(links)
+
+    host, port = links[index]
+
+    proxy = Proxy(host, port)
+    pid = index
 
 
 class ProxyPool(object):
@@ -55,7 +67,7 @@ class ProxyPool(object):
         self.__pool: Pool = self.__ctx.Pool(
             processes=len(links),
             initializer=init_ex,
-            initargs=(links, serial)
+            initargs=(links, serial),
         )
 
     def __enter__(self):
@@ -83,10 +95,10 @@ class ProxyPool(object):
     def map(self, iterable, chunk_size=None) -> List[Any]:
         return self.__pool.map(main, iterable, chunksize=chunk_size)
 
-    def imap(self, iterable, chunk_size=1) -> Iterable[Any]:
+    def imap(self, iterable, chunk_size=1) -> Iterator[Any]:
         return self.__pool.imap(main, iterable, chunksize=chunk_size)
 
-    def imap_unordered(self, iterable, chunk_size=1) -> Iterable[Any]:
+    def imap_unordered(self, iterable, chunk_size=1) -> Iterator[Any]:
         return self.__pool.imap_unordered(main, iterable, chunksize=chunk_size)
 
     def __call__(self, *args, **kwargs) -> Any:

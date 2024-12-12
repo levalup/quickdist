@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from typing import List, Optional, Tuple, Any, Iterable
+from typing import List, Optional, Tuple, Any, Iterator
 
 from .logger import logger
 from .proxy import Proxy
@@ -71,11 +71,11 @@ class Monster(object):
         assert self.__pool is not None
         return self.__pool.map(iterable, chunk_size=chunk_size)
 
-    def imap(self, iterable, chunk_size=1) -> Iterable[Any]:
+    def imap(self, iterable, chunk_size=1) -> Iterator[Any]:
         assert self.__pool is not None
         return self.__pool.imap(iterable, chunk_size=chunk_size)
 
-    def imap_unordered(self, iterable, chunk_size=1) -> Iterable[Any]:
+    def imap_unordered(self, iterable, chunk_size=1) -> Iterator[Any]:
         assert self.__pool is not None
         return self.__pool.imap_unordered(iterable, chunk_size=chunk_size)
 

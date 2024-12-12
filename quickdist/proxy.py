@@ -6,7 +6,7 @@ This file only run in subprocess
 
 from typing import Dict
 
-from .pyzmq.binding import Dealer
+from .pyzmq.binding import Req
 from .tunnel import Message
 from .logger import logger
 from .mount import Mount
@@ -14,7 +14,7 @@ from .mount import Mount
 
 class Proxy(object):
     def __init__(self, host: str, port: int):
-        self.__client = Dealer(host, port)
+        self.__client = Req(host, port)
 
     @property
     def host(self):
