@@ -25,9 +25,9 @@ def main(*args, **kwargs):
         # copy temp files to work dir
         for arg in ret.args:
             if isinstance(arg, File):
-                if not arg.nocopy:
+                if arg.copied:
                     # print(f'[{datetime.now()}] [DEBUG] COPY(TEMP->WORK): {arg.path}')
-                    arg.to_origin()
+                    arg.copy()
     else:
         raise RuntimeError(f'{ret} on {proxy.host}:{proxy.port}')
 

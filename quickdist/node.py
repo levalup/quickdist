@@ -21,13 +21,8 @@ def pong(msg: Message) -> Message:
     return Message('PONG', *msg.args, **msg.kwargs)
 
 
-def copy_origin_to_local(file: File):
-    if not file.nocopy:
-        file.to_local()
-
-
-def copy_local_to_temp(file: File):
-    file.to_temp()
+def copy_file(file: File):
+    file.copy()
 
 
 class Node(object):
@@ -115,9 +110,9 @@ class Node(object):
         # copy work files to local
         results: List[Future] = []
         for arg in each_file(msg.args):
-            if not arg.nocopy:
+            if arg.copied:
                 logger.debug(f'COPY(WORK->LOCAL): {arg.path}')
-                results.append(self.__executor.submit(copy_origin_to_local, arg))
+                results.append(self.__executor.submit(copy_file, arg))
         for result in results:
             result.result()
 
@@ -130,9 +125,9 @@ class Node(object):
         # copy local files to temp
         results: List[Future] = []
         for arg in each_file(args):
-            if not arg.nocopy:
+            if arg.copied:
                 logger.debug(f'COPY(LOCAL->TEMP): {arg.path}')
-                results.append(self.__executor.submit(copy_local_to_temp, arg))
+                results.append(self.__executor.submit(copy_file, arg))
         for result in results:
             result.result()
 

@@ -5,8 +5,9 @@ import os.path as osp
 import pathlib
 import hashlib
 import shutil
+from enum import Enum
 from collections import deque
-from typing import Any, Dict, Union, List, Generator
+from typing import Any, Dict, Union, List, Generator, Optional
 
 __all__ = [
     'File',
@@ -47,10 +48,10 @@ def load_json_value(path: str, key: str) -> Any:
         return None
 
 
-def get_workdir(source: str = None) -> str:
-    if source:
-        env = f'WORKDIR_{source.upper()}'
-        key = f'workdirs.{source.lower()}'
+def get_workdir(origin: str = None) -> str:
+    if origin:
+        env = f'WORKDIR_{origin.upper()}'
+        key = f'workdirs.{origin.lower()}'
     else:
         env = 'WORKDIR'
         key = 'workdir'
@@ -67,11 +68,11 @@ def get_workdir(source: str = None) -> str:
     raise ValueError(f'Missing config in environment {env} or json({config_json}, "{key}")')
 
 
-def get_tempdir(source: str = None) -> str:
+def get_tempdir(origin: str = None) -> str:
     env = 'TEMPDIR'
     key = 'tempdir'
-    if source:
-        sep = source.lower()
+    if origin:
+        sep = origin.lower()
     else:
         sep = '__root__'
 
@@ -87,11 +88,11 @@ def get_tempdir(source: str = None) -> str:
     raise ValueError(f'Missing config in environment {env} or json({config_json}, "{key}")')
 
 
-def get_localdir(source: str = None) -> str:
+def get_localdir(origin: str = None) -> str:
     env = 'LOCALDIR'
     key = 'localdir'
-    if source:
-        sep = source.lower()
+    if origin:
+        sep = origin.lower()
     else:
         sep = '__root__'
 
@@ -148,81 +149,110 @@ def same_path(path1: str, path2: str):
         return False
 
 
+class Location(Enum):
+    workdir = 1
+    local = 2
+    temp = 3
+
+
 class File(object):
-    def __init__(self, path: str, source: str = None, nocopy: bool = False):
+    def __init__(self, location: Location, path: str,
+                 origin: str = None,
+                 copy_from: Location = None,
+                 md5: str = None):
         """
         :param path: path is related path in local, temp and workdir
-        :param source:
-        :param nocopy: not copy file from origin to local
+        :param origin:
+        :param copy_from: copy from location
+        :param md5: copy check md5
         """
-        self.__source = source
+        self.__location: Location = location
         self.__path = path
-        self._md5 = None
-        self.__nocopy = nocopy
+        self.__origin = origin
+
+        # Copied file from location
+        self.__from: Optional[Location] = copy_from
+
+        # File MD5
+        self.__md5 = md5
+
+    def _to(self, location: Location):
+        if self.__location == location:
+            return self
+        if self.__from is not None:
+            raise RuntimeError('Unable to copy a file that is waiting to be copied')
+        current_path = self.path(self.__location)
+        if not osp.exists(current_path):
+            raise FileNotFoundError(current_path)
+        md5 = self.__md5 or calculate_md5(current_path)
+        copy_from = self.__from or self.__location
+        return File(
+            location, self.__path, self.__origin,
+            copy_from=copy_from, md5=md5,
+        )
+
+    def to_local(self):
+        """
+        Copy file to local.
+        :return: File
+        """
+        return self._to(Location.local)
+
+    def to_origin(self):
+        """
+        Copy file to origin directly.
+        :return: File
+        """
+        return self._to(Location.workdir)
+
+    def to_temp(self):
+        """
+        Copy file to temp, then the host system will copy it into workdir.
+        :return: File
+        """
+        return self._to(Location.temp)
 
     @property
-    def path(self):
+    def copied(self) -> bool:
+        return self.__from is not None
+
+    def copy(self):
+        """
+        Copy file from `self.__from`.
+        Execute copy.
+        :return: File
+        """
+        if self.__from is None or self.__from == self.__location:
+            return self
+        src = self.path(self.__from)
+        dst = self.path(self.__location)
+        if same_path(src, dst):
+            self.__from = None
+            return self
+        if osp.isfile(dst) and calculate_md5(dst) == self.__md5:
+            self.__from = None
+            return self
+        copy_file(src, dst)
+        self.__from = None
+        return self
+
+    def path(self, location: Location = None) -> str:
+        if location is None:
+            location = self.__location
+        if location is Location.temp:
+            return osp.join(get_tempdir(self.__origin), self.__path)
+        if location is Location.local:
+            return osp.join(get_localdir(self.__origin), self.__path)
+        if location is Location.workdir:
+            return osp.join(get_workdir(self.__origin), self.__path)
         return self.__path
 
     @property
-    def nocopy(self):
-        return self.__nocopy
+    def parent(self):
+        return File(self.__location, os.path.dirname(self.__path))
 
-    @property
-    def md5(self):
-        return self._md5
-
-    def to_local(self, cache: bool = True):
-        """
-        Copy file from workdir in local
-        :return:
-        """
-        src = self.origin
-        dst = self.local
-        if same_path(src, dst):
-            return
-        if cache and osp.isfile(dst) and calculate_md5(dst) == self.md5:
-            return
-        copy_file(src, dst)
-
-    def to_temp(self, cache: bool = True):
-        """
-        Copy file from local to temp
-        The Copy may cross network
-        :return:
-        """
-        src = self.local
-        dst = self.temp
-        if same_path(src, dst):
-            return
-        if cache and osp.isfile(dst) and calculate_md5(dst) == self.md5:
-            return
-        copy_file(src, dst)
-
-    def to_origin(self, cache: bool = True):
-        """
-        Copy file from temp to workdir
-        :return:
-        """
-        src = self.temp
-        dst = self.origin
-        if same_path(src, dst):
-            return
-        if cache and osp.isfile(dst) and calculate_md5(dst) == self.md5:
-            return
-        copy_file(src, dst)
-
-    @property
-    def origin(self) -> str:
-        return osp.join(get_workdir(self.__source), self.__path)
-
-    @property
-    def local(self) -> str:
-        return osp.join(get_localdir(self.__source), self.__path)
-
-    @property
-    def temp(self) -> str:
-        return osp.join(get_tempdir(self.__source), self.__path)
+    def __truediv__(self, tail: str):
+        return File(self.__location, os.path.join(self.__path, tail))
 
 
 def reduce_absolute(path: str, root: str):
@@ -237,21 +267,18 @@ def reduce_absolute(path: str, root: str):
 
 
 class WorkFile(File):
-    def __init__(self, path: str, source: str = None, nocopy: bool = False):
-        super().__init__(reduce_absolute(path, get_workdir(source)), source, nocopy)
-        self._md5 = calculate_md5(self.origin)
+    def __init__(self, path: str, origin: str = None):
+        super().__init__(Location.workdir, reduce_absolute(path, get_workdir(origin)), origin)
 
 
 class LocalFile(File):
-    def __init__(self, path: str, source: str = None):
-        super().__init__(reduce_absolute(path, get_localdir(source)), source)
-        self._md5 = calculate_md5(self.local)
+    def __init__(self, path: str, origin: str = None):
+        super().__init__(Location.local, reduce_absolute(path, get_localdir(origin)), origin)
 
 
 class TemplFile(File):
-    def __init__(self, path: str, source: str = None):
-        super().__init__(reduce_absolute(path, get_tempdir(source)), source)
-        self._md5 = calculate_md5(self.temp)
+    def __init__(self, path: str, origin: str = None):
+        super().__init__(Location.temp, reduce_absolute(path, get_tempdir(origin)), origin)
 
 
 def each_file(a: Any) -> Generator[File, None, None]:
