@@ -286,8 +286,10 @@ def each_file(a: Any) -> Generator[File, None, None]:
         yield a
         return
 
+    cache = set()
     iters = deque()
     if isinstance(a, (list, tuple, dict)):
+        cache.add(a)
         iters.append(a)
 
     while iters:
@@ -296,13 +298,15 @@ def each_file(a: Any) -> Generator[File, None, None]:
             for v in values.values():
                 if isinstance(v, File):
                     yield v
-                elif isinstance(v, (list, tuple, dict)):
+                elif isinstance(v, (list, tuple, dict)) and v not in cache:
+                    cache.add(v)
                     iters.append(v)
         else:
             for v in values:
                 if isinstance(v, File):
                     yield v
-                elif isinstance(v, (list, tuple, dict)):
+                elif isinstance(v, (list, tuple, dict)) and v not in cache:
+                    cache.add(v)
                     iters.append(v)
 
 

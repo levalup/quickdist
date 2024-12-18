@@ -61,11 +61,11 @@ class Monster(object):
 
     def call_async(self, *args, **kwargs):
         assert self.__pool is not None
-        return self.__pool.call_async(args, kwargs)
+        return self.__pool.call_async(*args, **kwargs)
 
     def call(self, *args, **kwargs) -> Any:
         assert self.__pool is not None
-        return self.__pool.call(args, kwargs)
+        return self.__pool.call(*args, **kwargs)
 
     def map(self, iterable, chunk_size=None) -> List[Any]:
         assert self.__pool is not None
@@ -81,7 +81,7 @@ class Monster(object):
 
     def __call__(self, *args, **kwargs) -> Any:
         assert self.__pool is not None
-        return self.__call__(args, kwargs)
+        return self.__pool.__call__(*args, **kwargs)
 
 
 def main():

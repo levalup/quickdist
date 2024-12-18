@@ -74,6 +74,9 @@ class Node(object):
                 return Message('ERROR', str(e)).bytes()
 
         rep = MultiThreadRep(port=self.__port, target=target, threads=self.__processes)
+
+        logger.info(f"Serve node :{self.__port}")
+
         rep.run()
 
     def info(self, msg: Message) -> Message:
